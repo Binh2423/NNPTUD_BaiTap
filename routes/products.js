@@ -1,9 +1,9 @@
 var express = require('express');
+const slugify = require('slugify'); // Add slugify library
 const { ConnectionCheckOutFailedEvent } = require('mongodb');
-var router = express.Router();
-let productModel = require('../schemas/product')
-let CategoryModel = require('../schemas/category')
-
+let router = express.Router();
+let categoryModel = require('../schemas/category'); // ĐẢM BẢO CÓ DÒNG NÀY
+let productModel = require('../schemas/product');   // ĐẢM BẢO CÓ DÒNG NÀY
 function buildQuery(obj){
   console.log(obj);
   let result = {};
@@ -57,40 +57,76 @@ router.get('/:id', async function(req, res, next) {
   }
 });
 
+router.get('/slug/:category/:product', async function(req, res, next) {
+  try {
+    let categorySlug = req.params.category;
+    let productSlug = req.params.product;
+
+    let category = await categoryModel.findOne({ slug: categorySlug });
+    if (!category) {
+      return res.status(404).send({
+        success: false,
+        message: "Category not found"
+      });
+    }
+
+    let product = await productModel.findOne({ slug: productSlug, category: category._id });
+    if (!product) {
+      return res.status(404).send({
+        success: false,
+        message: "Product not found"
+      });
+    }
+
+    res.status(200).send({
+      success: true,
+      data: product
+    });
+  } catch (error) {
+    res.status(500).send({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
 router.post('/', async function(req, res, next) {
   try {
-    let cate = await CategoryModel.findOne({name:req.body.category})
-    if(cate){
+    let cate = await CategoryModel.findOne({ name: req.body.category });
+    if (cate) {
       let newProduct = new productModel({
         name: req.body.name,
-        price:req.body.price,
+        slug: slugify(req.body.name, { lower: true }), // Generate slug
+        price: req.body.price,
         quantity: req.body.quantity,
-        category:cate._id
-      })
+        category: cate._id
+      });
       await newProduct.save();
       res.status(200).send({
-        success:true,
-        data:newProduct
+        success: true,
+        data: newProduct
       });
-    }else{
+    } else {
       res.status(404).send({
-        success:false,
-        data:"cate khong dung"
+        success: false,
+        data: "cate khong dung"
       });
     }
   } catch (error) {
     res.status(404).send({
-      success:false,
-      message:error.message
+      success: false,
+      message: error.message
     });
   }
 });
+
 router.put('/:id', async function(req, res, next) {
   try {
     let updateObj = {};
     let body = req.body;
-    if(body.name){
+    if (body.name) {
       updateObj.name = body.name;
+      updateObj.slug = slugify(body.name, { lower: true }); // Update slug if name changes
     }
     if(body.price){
       updateObj.price = body.price;
@@ -147,4 +183,40 @@ router.delete('/:id', async function(req, res, next) {
     });
   }
 });
+
+// Lấy tất cả sản phẩm theo category slug
+router.get('/slug/:category', async (req, res) => {
+    try {
+        let category = await categoryModel.findOne({ slug: req.params.category });
+        if (!category) {
+            return res.status(404).send({ success: false, message: "Danh mục không tồn tại" });
+        }
+
+        let products = await productModel.find({ category: category._id });
+        res.status(200).send({ success: true, data: products });
+    } catch (error) {
+        res.status(500).send({ success: false, message: error.message });
+    }
+});
+
+// Lấy sản phẩm theo category slug và product slug
+router.get('/slug/:category/:product', async (req, res) => {
+    try {
+        let category = await categoryModel.findOne({ slug: req.params.category });
+        if (!category) {
+            return res.status(404).send({ success: false, message: "Danh mục không tồn tại" });
+        }
+
+        let product = await productModel.findOne({ slug: req.params.product, category: category._id });
+        if (!product) {
+            return res.status(404).send({ success: false, message: "Sản phẩm không tồn tại" });
+        }
+
+        res.status(200).send({ success: true, data: product });
+    } catch (error) {
+        res.status(500).send({ success: false, message: error.message });
+    }
+});
+
 module.exports = router;
+
